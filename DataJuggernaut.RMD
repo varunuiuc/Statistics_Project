@@ -1,0 +1,312 @@
+---
+title: "Visibility Forecasting Model"
+author: "Bipin Chandra Karnati (karnati3), Debajit Mitra(debajit2), Varun Sharma(varun4)"
+date: "8/4/2020"
+output:
+  html_document: 
+    highlight: haddock
+    theme: spacelab
+    toc: yes
+urlcolor: cyan
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, echo = FALSE, message = FALSE, warning = FALSE}
+options(scipen = 1,
+        digits = 4,
+        width = 80)
+library(knitr)
+opts_chunk$set(cache = TRUE, autodep = TRUE)
+```
+
+## **Introduction**
+
+- **The data**
+  + This dataset is an hourly weather summary including the weather parameters Temperature, Pressure, Wind Speed and Visibility along with few other parameters.
+
+- **Origin**
+  + This data is observed in Szeged, the 3rd largest city in Hungary, for a span of 10 years between 2006-2016. Following is the source of the data - **[Szeged Weather Data](https://www.kaggle.com/budincsevity/szeged-weather/data)** 
+
+- **Variables**
+- This dataset has 96,454 observations and 12 variables. 
+  + Formatted Date - (Date of observation)
+  + Summary - (Description of Weather Condition)
+  + PrecipType - (Precipitation Type)
+  + Temperature - (Temparature in Celsius)
+  + ApparentTemperature - (Temperature in Celsius)
+  + Humidity - (Amount of Moisture Present in the Atmosphere)
+  + WindSpeed - (Wind Speed in km/hr)
+  + WindBearing - (Direction of the Wind in Degrees)
+  + Visibility - (Visibility in km)
+  + Loud Cover - (Cloud Cover percentage)
+  + Pressure - (Atmospheric Pressure in millibars)
+  + Daily Summary (Description of Weather Condition)
+  
+These variables indicate important weather parameters collected over a period of 10 years. As part of this data analysis project, we are trying to understand the relationship among different parameters in the dataset based on our learning in this class. We will focus on observing relationship of visibility with other weather parameters. We will use different statistical models to understand this relationship so that we can also make a good prediction of visibility using those statistical models. Visibility information is essential in air quality monitoring which needs accurate real-time observations. This is the reason we chose historical data observed over a period of 10 years.
+Visibility is farthest distance that a person with normal vision can recognize a target from the back-ground.  Severe reduction of visibility often results in great inconveniences to our life, and even cause major traffic accidents. Thus, it is of great significance to establish an accurate forecast visibility system. Once a forecast model is built, we will test the accuracy of the model by using a subset of real time data that was not used for model building. We will also plan to test the model using real time weather parameters.
+
+## **Methods**
+
+```{r}
+# Loading the data
+library(readr)
+weather_data2 = read_csv("weatherHistory.csv")
+head(weather_data2, 20)
+```
+- **Data Analysis**
+
+Based on the initial analysis of the data -
+The column "Loud COver" seems to have all zeros so we plan to remove that column. 
+
+
+
+```{r}
+weather_data2$`Daily Summary` <- as.factor(weather_data2$`Daily Summary`)
+levels(weather_data2$`Daily Summary`)
+```
+
+```{r}
+str(weather_data2)
+#table(weather_data$Summary)
+
+
+#table(weather_data$PrecipType)
+weather_data2[(weather_data2$`Precip Type` == "null"),]$`Precip Type` <- "other"
+
+weather_data2 = weather_data2[,c(-1,-10, -12)]
+#str(weather_data)
+colnames(weather_data2) <- c("Summary", "PrecipType", "Temperature", "ApparentTemperature", "Humidity", "WindSpeed", "WindBearing","Visibility", "Pressure")
+
+weather_data2$'PrecipType' <- as.factor(weather_data2$'PrecipType')
+
+weather_data2$Summary <- as.factor(weather_data2$Summary)
+
+```
+
+Breezy and Dry -- Breezy
+Dangerously Windy and Partly Cloudy -- Dry and Partly Cloudy
+Humid and Overcast --Humid and Partly Cloudy
+Rain -- Light Rain
+Windy -- Breezy
+Windy and Dry -- Breezy
+Windy and Foggy -- Foggy
+
+Drizzle -- Light Rain
+Dry -- Clear
+Dry and Mostly Cloudy -- Breezy and Mostly Cloudy 
+Windy and Mostly Cloudy -- Breezy and Mostly Cloudy
+Windy and Overcast -- Overcast
+Windy and Partly Cloudy  -- Partly Cloudy
+Breezy and Foggy -- Foggy
+Humid and Partly Cloudy -- Partly Cloudy
+Humid and Mostly Cloudy -- Mostly Cloudy
+Breezy -- Breezy and Overcast
+Dry and Partly Cloudy  -- Partly Cloudy 
+
+```{r}
+weather_data2[(weather_data2$`Summary` == "Breezy and Dry"),]$`Summary` <- "Breezy"
+weather_data2[(weather_data2$`Summary` == "Dangerously Windy and Partly Cloudy"),]$`Summary` <- "Dry and Partly Cloudy"
+weather_data2[(weather_data2$`Summary` == "Humid and Overcast"),]$`Summary` <- "Humid and Partly Cloudy"
+weather_data2[(weather_data2$`Summary` == "Rain"),]$`Summary` <- "Light Rain"
+weather_data2[(weather_data2$`Summary` == "Windy"),]$`Summary` <- "Breezy"
+weather_data2[(weather_data2$`Summary` == "Windy and Dry"),]$`Summary` <- "Breezy"
+weather_data2[(weather_data2$`Summary` == "Windy and Foggy"),]$`Summary` <- "Breezy"
+weather_data2[(weather_data2$`Summary` == "Drizzle"),]$`Summary` <- "Light Rain"
+weather_data2[(weather_data2$`Summary` == "Dry"),]$`Summary` <- "Clear"
+weather_data2[(weather_data2$`Summary` == "Dry and Mostly Cloudy"),]$`Summary` <- "Breezy and Mostly Cloudy"
+weather_data2[(weather_data2$`Summary` == "Windy and Mostly Cloudy"),]$`Summary` <- "Breezy and Mostly Cloudy"
+weather_data2[(weather_data2$`Summary` == "Windy and Overcast"),]$`Summary` <- "Overcast"
+weather_data2[(weather_data2$`Summary` == "Windy and Partly Cloudy"),]$`Summary` <- "Partly Cloudy"
+weather_data2[(weather_data2$`Summary` == "Breezy and Foggy"),]$`Summary` <- "Foggy"
+weather_data2[(weather_data2$`Summary` == "Humid and Partly Cloudy"),]$`Summary` <- "Partly Cloudy"
+weather_data2[(weather_data2$`Summary` == "Humid and Mostly Cloudy"),]$`Summary` <- "Mostly Cloudy"
+weather_data2[(weather_data2$`Summary` == "Breezy"),]$`Summary` <- "Breezy and Overcast"
+weather_data2[(weather_data2$`Summary` == "Dry and Partly Cloudy"),]$`Summary` <- "Partly Cloudy"
+```
+
+
+```{r, warning=FALSE}
+pairs(weather_data, col="dodgerblue")
+
+```
+
+```{r}
+library(faraway)
+
+#cor(weather_data)
+```
+
+```{r}
+weather_data2 = weather_data2[weather_data2$Visibility != 0,]
+nrow(weather_data2)
+
+```
+
+**Introduction**
+
+
+**Methods**
+```{r}
+weather_data2$Temperature = (weather_data2$Temperature * (9 /5)) + 32
+```
+
+```{r}
+View(weather_data2)
+```
+
+```{r}
+#Sample the dataset for test and Train
+set.seed(42)
+trn_indx = sample(nrow(weather_data2), 78000)
+weather_data2_trn = weather_data2[trn_indx, ]
+weather_data2_tst = weather_data2[-trn_indx, ]
+```
+
+
+```{r}
+int_mod = lm(sqrt(Visibility) ~ PrecipType * Summary * sqrt(sqrt(Temperature^2)) * Humidity, data = weather_data2_trn)
+#subset = is.finite(log(weather_data$Visibility)
+```
+
+```{r}
+summary(int_mod)$r.squared
+```
+
+```{r}
+#aic 
+aic_mod = step(int_mod, direction="backward", trace=0)
+aic_mod
+```
+
+```{r}
+summary(aic_mod)
+```
+
+
+```{r}
+# Make functions to evaluate and summarize model performance
+library(lmtest)
+get_bp_pval = function(model) {
+  bptest(model)$p.value[[1]]
+}
+get_bp_decision = function(model, alpha) {
+  decide = unname(bptest(model)$p.value < alpha)
+  ifelse(decide, "Reject", "Fail to Reject")
+}
+get_sw_decision = function(model, alpha) {
+  decide = unname(shapiro.test(resid(model))$p.value < alpha)
+  ifelse(decide, "Reject", "Fail to Reject")
+}
+get_num_params = function(model) {
+  length(coef(model))
+}
+get_loocv_rmse = function(model) {
+  sqrt(mean(((weather_data2_trn$Visibility - (fitted(model))^2) / (1 - hatvalues(model))) ^ 2))
+}
+get_adj_r2 = function(model) {
+  summary(model)$adj.r.squared}
+  get_performance = function(model) {
+  data.frame(Param = get_num_params(model), LOOCV_RMSE = get_loocv_rmse(model), R2 = summary(model)$r.squared, Adj_R2 = get_adj_r2(model), BP_pval = get_bp_pval(model))
+  
+  }
+```
+
+```{r}
+length(weather_data1_trn$Visibility)
+length(fitted(int_mod))
+```
+
+```{r}
+#Define a diagnostics function, this is obtained from the homework#8
+diagnostics = function(model, pcol = "grey", lcol = "dodgerblue", alpha = 0.05, 
+                       plotit = TRUE, testit = TRUE) {
+  
+  if (plotit == TRUE) {
+    
+    # side-by-side plots (one row, two columns)
+    par(mfrow = c(1, 2))
+    
+    # fitted versus residuals
+    plot(fitted(model), (weather_data2_trn$Visibility - (fitted(model))^2), 
+         col = pcol, pch = 20, cex = 1.5, 
+         xlab = "Fitted", ylab = "Residuals", 
+         main = "Fitted versus Residuals")
+    abline(h = 0, col = lcol, lwd = 2)
+    grid()
+    
+    # qq-plot
+    qqnorm((weather_data2_trn$Visibility - (fitted(model))^2), col = pcol, pch = 20, cex = 1.5)
+    qqline((weather_data2_trn$Visibility - (fitted(model))^2), col = lcol, lwd = 2)
+    grid()
+  }
+}
+  
+```
+
+```{r}
+# Training RMSE
+sqrt(mean(((weather_data2_trn$Visibility - (fitted(int_mod))^2) ^ 2)))
+
+```
+```{r, warning=FALSE}
+#Predict
+pred_tst = predict(int_mod, newdata = weather_data2_tst)
+```
+
+```{r}
+(test_rmse = sqrt(mean((weather_data2_tst$Visibility - (pred_tst)^2) ^2)))
+```
+
+```{r}
+table(weather_data2$Summary)
+```
+
+Breezy and Dry -- Breezy
+Dangerously Windy and Partly Cloudy -- Dry and Partly Cloudy
+Humid and Overcast --Humid and Partly Cloudy
+Rain -- Light Rain
+Windy -- Breezy
+Windy and Dry -- Breezy
+Windy and Foggy -- Foggy
+
+Drizzle -- Light Rain
+Dry -- Clear
+Dry and Mostly Cloudy -- Breezy and Mostly Cloudy 
+Windy and Mostly Cloudy -- Windy and Mostly Cloudy
+Windy and Overcast -- Overcast
+Windy and Partly Cloudy  -- Partly Cloudy
+Breezy and Foggy -- Foggy
+Humid and Partly Cloudy -- Partly Cloudy
+
+
+
+```{r fig.height=6, fig.width=10}
+diagnostics(int_mod)
+get_loocv_rmse(int_mod)
+get_adj_r2(int_mod)
+get_bp_decision(int_mod, alpha = 0.05)
+get_num_params(int_mod)
+bptest(int_mod)
+```
+
+
+```{r}
+# Evaluate performance of initial models
+kable(rbind(init = get_performance(int_mod), add = get_performance(add_mod)))
+```
+
+
+```{r}
+aic_mod = step(int_mod, step = "backward", trace = 0)
+aic_mod
+```
+
+
+**Results**
+
+
+**Discussion**
+
+
+**Appendix**

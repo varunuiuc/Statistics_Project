@@ -1,0 +1,242 @@
+---
+title: "DataJuggernaut"
+author: "Bipin"
+date: "8/4/2020"
+output: html_document
+---
+
+```{r}
+library(readr)
+weather_data = read_csv("weatherHistory.csv")
+View(weather_data)
+```
+```{r}
+
+```
+#Deb
+```{r}
+#str(weather_data)
+#table(weather_data$Summary)
+
+
+#table(weather_data$PrecipType)
+weather_data[(weather_data$`Precip Type` == "null"),]$`Precip Type` <- "other"
+
+weather_data = weather_data[,c(-1,-2,-10,-12)]
+#str(weather_data)
+#str
+colnames(weather_data) <- c("PrecipType", "Temperature", "ApparentTemperature", "Humidity", "WindSpeed", "WindBearing","Visibility", "Pressure")
+
+weather_data$PrecipType <- as.factor(weather_data$PrecipType)
+
+```
+
+```{r, warning=FALSE}
+pairs(weather_data, col="dodgerblue", subset=c("PrecipType", "Visibility", "Temperature"))
+
+```
+
+```{r}
+library(faraway)
+
+cor(weather_data)
+```
+
+**Introduction**
+
+
+**Methods**
+
+#varun
+```{r}
+# load libraries
+
+library(broom)
+library(knitr)
+
+library(data.table)
+
+
+library(lmtest)
+
+library(faraway)
+library(MASS)
+
+library(boot)
+library(caret)
+
+library(ggplot2)
+
+
+```
+
+
+
+```{r}
+
+#Define a diagnostics function
+
+diagnostics = function(model, pcol = "grey", lcol = "dodgerblue", alpha = 0.05, 
+                       plotit = TRUE, testit = TRUE) {
+  
+  if (plotit == TRUE) {
+    
+    # side-by-side plots (one row, two columns)
+    par(mfrow = c(1, 2))
+    
+    # fitted versus residuals
+    plot(fitted(model), resid(model), 
+         col = pcol, pch = 20, cex = 1.5, 
+         xlab = "Fitted", ylab = "Residuals", 
+         main = "Fitted versus Residuals")
+    abline(h = 0, col = lcol, lwd = 2)
+    grid()
+    
+    # qq-plot
+    qqnorm(resid(model), col = pcol, pch = 20, cex = 1.5)
+    qqline(resid(model), col = lcol, lwd = 2)
+    grid()
+  }
+  
+
+  
+
+}
+
+
+```
+
+```{r}
+# Make functions to evaluate and summarize model performance
+
+library(lmtest)
+
+get_bp_pval = function(model) {
+  bptest(model)$p.value[[1]]
+}
+
+get_bp_decision = function(model, alpha) {
+  decide = unname(bptest(model)$p.value < alpha)
+  ifelse(decide, "Reject", "Fail to Reject")
+}
+
+get_sw_decision = function(model, alpha) {
+  decide = unname(shapiro.test(resid(model))$p.value < alpha)
+  ifelse(decide, "Reject", "Fail to Reject")
+}
+
+get_num_params = function(model) {
+  length(coef(model))
+}
+
+get_loocv_rmse = function(model) {
+  sqrt(mean((resid(model) / (1 - hatvalues(model))) ^ 2))
+}
+
+get_adj_r2 = function(model) {
+  round(summary(model)$adj.r.squared*100,2)}
+
+  get_performance = function(model) {
+  data.frame(Param = get_num_params(model), LOOCV_RMSE = get_loocv_rmse(model), R2 = round(summary(model)$r.squared*100,2), Adj_R2 = get_adj_r2(model), BP_pval = get_bp_pval(model))
+  
+  }
+```
+
+
+
+```{r}
+### Initial Models
+
+# additive model
+
+#str(weather_data)
+ 
+model_init = lm(Visibility ~ Temperature + Humidity + WindSpeed + WindBearing + ApparentTemperature , data = weather_data)
+model_add = lm(Visibility ~ Temperature + Humidity + WindSpeed + WindBearing +  Pressure + ApparentTemperature + PrecipType, data = weather_data)
+
+#summary(start_model_1)
+
+diagnostics(model_add)
+get_loocv_rmse(model_add)
+get_adj_r2(model_add)
+get_bp_decision(model_add, alpha = 0.01)
+get_num_params(model_add)
+bptest(model_init)
+```
+
+```{r}
+# Evaluate performance of initial models
+
+kable(rbind(init = get_performance(model_init), add = get_performance(model_add)))
+```
+
+```{r}
+# Diagnostic plots for model_add
+
+par(mfrow = c(2,2))
+plot(model_add)
+```
+
+### Start Model Improvements
+
+```{r}
+# Use backward search AIC 
+
+model_aic_add = step(model_add, trace = F)
+```
+
+```{r}
+# Backward search BIC 
+
+n = length(resid(model_add))
+model_bic_add = step(model_add, k = log(n), trace = F)
+
+
+```
+
+
+```{r}
+# Build a model with 2-way interactions
+
+model_int = lm(Visibility ~ (Temperature + Humidity + WindSpeed + WindBearing +  Pressure + ApparentTemperature + PrecipType)^2, data = weather_data)
+```
+
+
+```{r}
+# Use backward search AIC on the 2-way interaction model
+
+model_aic = step(model_int, trace = F)
+```
+
+```{r}
+# Backward search BIC on the 2-way interaction model
+
+n = length(resid(model_int))
+model_bic = step(model_int, k = log(n), trace = F)
+``` 
+
+### Compare Performance of Models
+
+```{r}
+# Compare performance of models
+
+kable(rbind(add = get_performance(model_add), add_aic = get_performance(model_aic_add),  add_bic = get_performance(model_bic_add), int = get_performance(model_int), int_aic = get_performance(model_aic), int_bic = get_performance(model_bic)))
+
+```
+
+Model improvements were attempted with AIC /BIC based search and adding two way interations.Model with much smaller LOOCV_RMSE means like int_bic and int_aic were better model.These models have higher Adj_R2 and R2 values also.
+
+```{r}
+summary(model_bic)
+```
+
+#varun
+
+
+**Results**
+
+
+**Discussion**
+
+
+**Appendix**

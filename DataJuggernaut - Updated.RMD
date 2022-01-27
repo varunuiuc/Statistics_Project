@@ -1,0 +1,531 @@
+---
+title: "Visibility Forecasting Model"
+author: "STAT420, SUMMER 2020, Bipin Chandra Karnati (karnati3), Debajit Mitra(debajit2), Varun Sharma(varun4)"
+date: "8/4/2020"
+output:
+  html_document: 
+    highlight: haddock
+    theme: spacelab
+    toc: yes
+urlcolor: cyan
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, echo = FALSE, message = FALSE, warning = FALSE}
+options(scipen = 1,
+        digits = 4,
+        width = 80)
+library(knitr)
+opts_chunk$set(cache = TRUE, autodep = TRUE)
+```
+
+## **Introduction**
+
+- **The data**
+  + This dataset is an hourly weather summary including the weather parameters Temperature, Pressure, Wind Speed and Visibility along with few other parameters.
+
+- **Origin**
+  + This data is observed in Szeged, the 3rd largest city in Hungary, for a span of 10 years between 2006-2016. Following is the source of the data - **[Szeged Weather Data](https://www.kaggle.com/budincsevity/szeged-weather/data)** 
+
+- **Variables**
+- This dataset has 96,454 observations and 12 variables. 
+  + Formatted Date -  (Date of observation)
+  + Summary -         (Description of Weather Condition)
+  + PrecipType -      (Precipitation Type)
+  + Temperature -     (Temperature in Celsius)
+  + ApparentTemperature - (Temperature in Celsius)
+  + Humidity -        (Amount of Moisture Present in the Atmosphere)
+  + WindSpeed -       (Wind Speed in km/hr)
+  + WindBearing -     (Direction of the Wind in Degrees)
+  + Visibility -      (Visibility in km)
+  + Loud Cover -      (Cloud Cover percentage)
+  + Pressure -        (Atmospheric Pressure in millibars)
+  + Daily Summary     (Description of Weather Condition)
+  
+These variables indicate important weather parameters collected over a period of 10 years. As part of this data analysis project, we are trying to understand the relationship among different parameters in the dataset based on our learning in this class. We will focus on observing relationship of visibility with other weather parameters. We will use different statistical models to understand this relationship so that we can also make a good prediction of visibility using those statistical models. Visibility information is essential in air quality monitoring which needs accurate real-time observations. This is the reason we chose historical data observed over a period of 10 years.
+Visibility is farthest distance that a person with normal vision can recognize a target from the back-ground.  Severe reduction of visibility often results in great inconveniences to our life, and even cause major traffic accidents. Thus, it is of great significance to establish an accurate forecast visibility system. Once a forecast model is built, we will test the accuracy of the model by using a subset of real time data that was not used for model building.
+
+## **Methods**
+
+```{r}
+# Loading the data
+library(readr)
+weather_data = read_csv("weatherHistory.csv")
+```
+- **Data Analysis**
+
+```{r}
+head(weather_data, 20)
+```
+
+
+Based on the initial analysis of the data -
+*The column "Loud COver" seems to have all zeros in the input dataset. Since this doesn't add any value we are removing this column.*
+
+```{r}
+weather_data = weather_data[,c(-10)] # Removing Loud Cover column
+```
+
+*The column "Daily Summary" has more than 200 distinct categorical data items and looks like the column "Summary" is briefly explaining the weather condition described in the variable "Daily Summary". Therefore, we are eliminating "Daily Summary" column from our analysis.*
+
+```{r}
+weather_data$`Daily Summary` = as.factor(weather_data$`Daily Summary`)
+length(levels(weather_data$`Daily Summary`))
+```
+
+```{r}
+# Removing Daily Summary column
+weather_data = weather_data[,c(-11)]
+```
+
+*The column "Formatted Date" is a timestamp of the observations. As part of our initial research we converted the timestamp to 'mmddhh' assuming that visibility might be different on different days of year. However, in our analysis we found that we can't use the linear models that we learned for time series data. Since we are not planning to use Time Series linear regression models, we will not be using this column for our analysis. Therefore, we are eliminating "Formatted Date" column from our analysis.*
+
+```{r}
+weather_data$`Formatted Date` = format(as.POSIXct(weather_data$`Formatted Date`,format = "%Y-%m-%d %H:%M:%S"), format = "%m%d%H")
+weather_data = weather_data[,c(-1)]
+```
+
+*The column Summary has 27 distinct values as shown below.*
+
+```{r}
+table(weather_data$Summary)
+```
+
+*We plan to convert this column to factor data, we are converting the categorical names of data items with their closest data item. We are converting those values that are significantly less frequent (they appeared less than 100 times out of ~100k).*
+
+```{r}
+weather_data[(weather_data$`Summary` == "Breezy and Dry"),]$`Summary` <- "Breezy"
+weather_data[(weather_data$`Summary` == "Dangerously Windy and Partly Cloudy"),]$`Summary` <- "Dry and Partly Cloudy"
+weather_data[(weather_data$`Summary` == "Humid and Overcast"),]$`Summary` <- "Humid and Partly Cloudy"
+weather_data[(weather_data$`Summary` == "Rain"),]$`Summary` <- "Light Rain"
+weather_data[(weather_data$`Summary` == "Windy"),]$`Summary` <- "Breezy"
+weather_data[(weather_data$`Summary` == "Windy and Dry"),]$`Summary` <- "Breezy"
+weather_data[(weather_data$`Summary` == "Windy and Foggy"),]$`Summary` <- "Breezy"
+weather_data[(weather_data$`Summary` == "Drizzle"),]$`Summary` <- "Light Rain"
+weather_data[(weather_data$`Summary` == "Dry"),]$`Summary` <- "Clear"
+weather_data[(weather_data$`Summary` == "Dry and Mostly Cloudy"),]$`Summary` <- "Breezy and Mostly Cloudy"
+weather_data[(weather_data$`Summary` == "Windy and Mostly Cloudy"),]$`Summary` <- "Breezy and Mostly Cloudy"
+weather_data[(weather_data$`Summary` == "Windy and Overcast"),]$`Summary` <- "Overcast"
+weather_data[(weather_data$`Summary` == "Windy and Partly Cloudy"),]$`Summary` <- "Partly Cloudy"
+weather_data[(weather_data$`Summary` == "Breezy and Foggy"),]$`Summary` <- "Foggy"
+weather_data[(weather_data$`Summary` == "Humid and Partly Cloudy"),]$`Summary` <- "Partly Cloudy"
+weather_data[(weather_data$`Summary` == "Humid and Mostly Cloudy"),]$`Summary` <- "Mostly Cloudy"
+weather_data[(weather_data$`Summary` == "Breezy"),]$`Summary` <- "Breezy and Overcast"
+weather_data[(weather_data$`Summary` == "Dry and Partly Cloudy"),]$`Summary` <- "Partly Cloudy"
+```
+
+```{r}
+# Converting categorical data to factor variables
+
+weather_data[(weather_data$`Precip Type` == "null"),]$`Precip Type` = "other"
+weather_data$'Precip Type' = as.factor(weather_data$'Precip Type')
+weather_data$Summary = as.factor(weather_data$Summary)
+```
+
+```{r}
+str(weather_data)
+```
+```{r}
+#Renaming Columns
+colnames(weather_data) <- c("WeatherCondition", "PrecipType", "Temperature", "ApparentTemperature", "Humidity", "WindSpeed", "WindBearing","Visibility", "Pressure")
+```
+
+```{r fig.height=6, fig.width=10, warning=FALSE}
+#Identifying relationship among dataset variables
+
+pairs(weather_data, col="dodgerblue")
+```
+*Based on the correlation plot shown above, the predictors Temperature and Apparent Temperature have high collinearity.*
+Converting factor variables to numeric to observe collinearity.
+
+```{r}
+weather_data$WeatherCondition = as.numeric(weather_data$WeatherCondition)
+weather_data$`PrecipType`= as.numeric(weather_data$`PrecipType`)
+```
+
+**Identifying Collinearity**
+```{r}
+library(faraway)
+(cor_data = cor(weather_data))
+```
+#Based on the above matrix, the numeric predictors Temperature and Apparent Temperature have high collinearity value of "r  round(cor_data[4,3],2)". 
+
+```{r}
+vif(weather_data) > 5
+```
+Since these two columns have high collinearity, we can remove Apparent Temperature and keep only Temperature for our model building.
+
+## **Methods**
+
+**Model Building**
+
+```{r}
+#Split the dataset for Train and Test (70:30)
+
+set.seed(42)
+trn_indx = sample(nrow(weather_data), 67000)
+weather_data_trn = weather_data[trn_indx, ]
+weather_data_tst = weather_data[-trn_indx, ]
+
+```
+
+
+**Model Evaluation**
+
+```{r}
+library(lmtest)
+get_bp_pval = function(model) {
+  bptest(model)$p.value[[1]]
+}
+
+get_bp_decision = function(model, alpha) {
+  decide = unname(bptest(model)$p.value < alpha)
+  ifelse(decide, "Reject", "Fail to Reject")
+}
+
+get_num_params = function(model) {
+  length(coef(model))
+}
+
+get_loocv_rmse = function(model) {
+  sqrt(mean((resid(model) / (1 - hatvalues(model))) ^ 2))
+}
+
+get_adj_r2 = function(model) {
+  round(summary(model)$adj.r.squared*100,2)
+  }
+
+get_performance = function(model) {
+  data.frame(Param = get_num_params(model), LOOCV_RMSE = get_loocv_rmse(model), R2 = round(summary(model)$r.squared*100,2), Adj_R2 = get_adj_r2(model), BP_pval = get_bp_pval(model))
+  }
+```
+
+```{r}
+diagnostics = function(model, pcol = "grey", lcol = "dodgerblue", alpha = 0.05, 
+                       plotit = TRUE, testit = TRUE) {
+  
+  if (plotit == TRUE) {
+    
+    # side-by-side plots (one row, two columns)
+    par(mfrow = c(1, 2))
+    
+    # fitted versus residuals
+    plot(fitted(model), resid(model), 
+         col = pcol, pch = 20, cex = 1.5, 
+         xlab = "Fitted", ylab = "Residuals", 
+         main = "Fitted versus Residuals")
+    abline(h = 0, col = lcol, lwd = 2)
+    
+    grid()
+    
+    # qq-plot
+    qqnorm(resid(model), col = pcol, pch = 20, cex = 1.5)
+    qqline(resid(model), col = lcol, lwd = 2)
+    grid()
+  }
+  
+  
+}
+```
+
+
+```{r}
+# Initial Model
+
+model_init = lm(Visibility ~ .-ApparentTemperature, data = weather_data_trn)
+```
+
+```{r fig.height=6, fig.width=10}
+diagnostics(model_init)
+```
+
+**Model Assumptions**
+
+- Based on above Fitted vs Residual plot, the equivariance and linearity assumption are suspected.For some of the datapoints, the model is overfitting and for some of the datapoints the model is underfitting.
+
+- Based on the Normal Q-Q plot above, the normality assumption of the model is suspected.
+
+```{r}
+# Additional Model Evaluation Metrics
+
+get_loocv_rmse(model_init)
+get_adj_r2(model_init)
+get_bp_decision(model_init, alpha = 0.05)
+get_num_params(model_init)
+bptest(model_init)
+```
+- Based on the above results, the adjusted $R^2$ of `r get_adj_r2(model_init)` is very low. Therefore, the change in visibility can't be explained properly by linear relationship with predictors.
+- The `p-value` out of Breusch-Pagan test is also very low. Therefore, the equivariance assumption is suspected.
+
+** Start Model Improvements **
+
+```{r}
+# Use backward search AIC 
+model_aic_add = step(model_init, trace = FALSE)
+```
+
+```{r}
+# Backward search BIC 
+n = length(resid(model_init))
+model_bic_add = step(model_init, k = log(n), trace = FALSE)
+```
+
+```{r}
+get_adj_r2(model_aic_add)
+get_adj_r2(model_bic_add)
+```
+
+## Below is our analysis with interaction model having all the predictors :
+
+```{r fig.height=6, fig.width=10}
+# Interaction Model
+weather_model_int = lm(Visibility ~ .^2, data = weather_data)
+
+rsquared_int = summary(weather_model_int)$r.squared
+
+plot(fitted(weather_model_int), resid(weather_model_int), col = "grey", pch = 20,
+xlab = "Fitted", ylab = "Residuals", main = "Interaction Model with all Predictors")
+abline(h = 0, col = "darkorange", lwd = 2)
+```
+
+- The R-Squared value for the interaction model is $`r round(rsquared_int*100,2)`$, but based on the Fitted vs Residual plot we can clearly see that the model assumptions has been violated.
+- We are also seeing some influential observations affecting the regression. Removing influential observations them and fit the model again expecting the significance of regression will improve.
+- We are removing $`r sum(cooks.distance(weather_model_int) > 4/nrow(weather_data))`$, influential observations from our fitted model.
+
+```{r fig.height=6, fig.width=10}
+# Interaction Model after removing Influential Observations
+weather_model_int_low_influence = lm(Visibility ~ .^2, data = weather_data, 
+                            subset = cooks.distance(weather_model_int) <= 4/nrow(weather_data))
+
+rsquared_low_influence = summary(weather_model_int_low_influence)$r.squared
+
+plot(fitted(weather_model_int_low_influence), resid(weather_model_int_low_influence), col = "grey", pch = 20,
+xlab = "Fitted", ylab = "Residuals", main = "Intercation model with no influential observations")
+abline(h = 0, col = "darkorange", lwd = 2)
+```
+
+- The R-Squared of the model after removing influential observations is calculated to $`r round(rsquared_low_influence*100,2)`$, which is a improved value than the previous model.
+- But the Fitted vs Residual plot is still showing violations in assumptions. 
+- With the expectation to improve the model, we are performing `Backword BIC` on the previous interaction model to see if it can better explain the variability of our response.
+
+```{r}
+weather_model_int_bic = step(weather_model_int, k=log(nrow(weather_data)), trace = 0)
+
+rsquared_int_bic = summary(weather_model_int_bic)$r.squared
+
+```
+
+- The R-Squared after performing the BIC is calculated to $`r round(rsquared_int_bic*100,2)`$. 
+- And as we can see that the value is not improving much with the previous attempts on interaction models, we are trying on a log transformation of the Response
+
+## Below is our analysis with log transformation and interaction with all predictors.
+
+```{r}
+any(is.infinite(log(weather_data$Visibility)))
+```
+
+- We found that there are some observations having `0` value in Visibility, which is failing the log transformation with *NAN* error. And we have decided to subset the observations only non-zero values in Visibility.
+
+```{r}
+weather_model_log_int = lm(log(Visibility) ~ .^2, data = weather_data,
+                            subset = is.finite(log(weather_data$Visibility)))
+
+plot(fitted(weather_model_log_int), resid(weather_model_log_int), col = "grey", pch = 20,
+xlab = "Fitted", ylab = "Residuals", main = "Data from Model 1")
+abline(h = 0, col = "darkorange", lwd = 2)
+
+rsquared_log_interaction = summary(weather_model_log_int)$r.squared
+```
+
+- We see a much improved value of R-Squared calculated to $`r round(rsquared_log_interaction*100,2)`$, but Fitted vs Residual plot showing violation with `Equal Variance` assumption of our linear model. 
+- We are removing influential observations from our data and fitting the model again to achieve a better plot.
+
+```{r}
+rows_removed = sum((as.numeric(weather_data$Visibility) == 0))
+weather_data = weather_data[(as.numeric(weather_data$Visibility) != 0),]
+```
+
+- As `0` value in Visibility is not feasible for our Response, we have decided to remove $`r rows_removed`$ observation having `0` value for the Visibility column.
+
+```{r}
+library(lmtest)
+weather_model_log_int_low_influence = lm(log(Visibility) ~ .^2, data = weather_data,
+                            subset = cooks.distance(weather_model_log_int) <= 4/nrow(weather_data))
+
+plot(fitted(weather_model_log_int_low_influence), resid(weather_model_log_int_low_influence), col = "grey", pch = 20,
+xlab = "Fitted", ylab = "Residuals", main = "Data from Model 1")
+abline(h = 0, col = "darkorange", lwd = 2)
+
+rsquared_log_interaction_low_influence = summary(weather_model_log_int_low_influence)$r.squared
+
+bptest(weather_model_log_int_low_influence)$p.value
+```
+
+- The Fitted vs Residual plot improved but still the Equal Variance and Linearity of the model is a suspect here. Also from a very low value of the bptest we can infer that the Normality assumptions has also been violated. 
+- Thus although we have a high R-Squared value of $`r round(rsquared_log_interaction_low_influence*100,2)`$, the model is not useful.
+
+## Below is our analysis with polynomial transformation.
+
+```{r}
+weather_model_poly = lm(Visibility ~ . + 
+                           I(Temperature^2) +
+                           I(Humidity^2) +
+                           I(WindSpeed^2) +
+                           I(WindBearing^2) +
+                           I(Pressure^2) , data = weather_data)
+
+rsquared_poly = summary(weather_model_poly)$r.squared
+
+
+plot(fitted(weather_model_poly), resid(weather_model_poly), col = "grey", pch = 20,
+xlab = "Fitted", ylab = "Residuals", main = "Data from Model 1")
+abline(h = 0, col = "darkorange", lwd = 2)
+
+```
+
+- The R-Squared value, `r round(rsquared_poly*100,2)` didn't improved much from our previous model and the Fitted vs Residual plot also showing violations of assumptions.
+
+
+```{r}
+weather_data$Temperature = (weather_data$Temperature * (9 /5)) + 32
+```
+
+
+```{r, eval=FALSE}
+int_mod = lm(sqrt(Visibility) ~ PrecipType * Summary * sqrt(sqrt(Temperature^2)) * Humidity, data = weather_data_trn)
+#subset = is.finite(log(weather_data$Visibility)
+```
+
+```{r,eval=FALSE}
+int2_mod = lm (sqrt(Visibility) ~ PrecipType * Summary * sqrt(sqrt(Temperature^2)) * Humidity, data = weather_data_trn, subset=cooks.distance(int_mod) <= 4 / nrow(weather_data3_trn))
+```
+
+```{r,eval=FALSE}
+visibility_inf = cooks.distance(int_mod) > 4 / nrow(weather_data_trn)
+visibility_cd = weather_data_trn$Visibility[(cooks.distance(int_mod) <= 4 / nrow(weather_data_trn)),]
+```
+
+```{r,eval=FALSE}
+sum(visibility_inf)
+```
+
+```{r,eval=FALSE}
+summary(int_mod)$r.squared
+summary(int2_mod)$r.squared
+```
+
+```{r,eval=FALSE}
+#aic 
+aic_mod = step(int_mod, direction="backward", trace=0)
+aic_mod
+```
+
+```{r,eval=FALSE}
+summary(aic_mod)
+```
+
+
+```{r,eval=FALSE}
+# Make functions to evaluate and summarize model performance
+library(lmtest)
+get_bp_pval = function(model) {
+  bptest(model)$p.value[[1]]
+}
+get_bp_decision = function(model, alpha) {
+  decide = unname(bptest(model)$p.value < alpha)
+  ifelse(decide, "Reject", "Fail to Reject")
+}
+get_sw_decision = function(model, alpha) {
+  decide = unname(shapiro.test(resid(model))$p.value < alpha)
+  ifelse(decide, "Reject", "Fail to Reject")
+}
+get_num_params = function(model) {
+  length(coef(model))
+}
+get_loocv_rmse = function(model1) {
+  sqrt(mean(((int_mod$model$`sqrt(Visibility)` - (fitted(model1))) / (1 - hatvalues(model1))) ^ 2))
+}
+get_adj_r2 = function(model) {
+  summary(model)$adj.r.squared}
+  get_performance = function(model) {
+  data.frame(Param = get_num_params(model), LOOCV_RMSE = get_loocv_rmse(model), R2 = summary(model)$r.squared, Adj_R2 = get_adj_r2(model), BP_pval = get_bp_pval(model))
+  
+  }
+```
+
+```{r, eval=FALSE}
+int2_mod$model
+```
+
+
+```{r,eval=FALSE}
+#Define a diagnostics function, this is obtained from the homework#8
+diagnostics = function(model1, pcol = "grey", lcol = "dodgerblue", alpha = 0.05, 
+                       plotit = TRUE, testit = TRUE) {
+  
+  if (plotit == TRUE) {
+    
+    # side-by-side plots (one row, two columns)
+    par(mfrow = c(1, 2))
+    
+    # fitted versus residuals
+    plot(fitted(model1), (int2_mod$model$`sqrt(Visibility)` - (fitted(model1))), 
+         col = pcol, pch = 20, cex = 1.5, 
+         xlab = "Fitted", ylab = "Residuals", 
+         main = "Fitted versus Residuals")
+    abline(h = 0, col = lcol, lwd = 2)
+    grid()
+    
+    # qq-plot
+    qqnorm((int2_mod$model$`sqrt(Visibility)` - (fitted(model1))), col = pcol, pch = 20, cex = 1.5)
+    qqline((int2_mod$model$`sqrt(Visibility)` - (fitted(model1))), col = lcol, lwd = 2)
+    grid()
+  }
+}
+  
+```
+
+```{r,eval=FALSE}
+# Training RMSE
+sqrt(mean(((int2_mod$model$`sqrt(Visibility)` - (fitted(int2_mod))) ^ 2)))
+
+```
+```{r, warning=FALSE,eval=FALSE}
+#Predict
+pred_tst = predict(int2_mod, newdata = weather_data3_tst)
+```
+
+```{r,eval=FALSE}
+(test_rmse = sqrt(mean((weather_data_tst$Visibility - (pred_tst^2)) ^2)))
+```
+
+```{r fig.height=6, fig.width=10,eval=FALSE}
+diagnostics(int2_mod)
+get_loocv_rmse(int_mod)
+get_adj_r2(int_mod)
+get_bp_decision(int2_mod, alpha = 0.05)
+get_num_params(int_mod)
+bptest(int2_mod)
+```
+
+
+```{r,eval=FALSE}
+# Evaluate performance of initial models
+kable(rbind(init = get_performance(int2_mod), add = get_performance(int_mod)))
+```
+
+
+```{r,eval=FALSE}
+aic_mod = step(int_mod, step = "backward", trace = 0)
+aic_mod
+```
+
+
+**Results**
+
+
+**Discussion**
+
+
+**Appendix**
