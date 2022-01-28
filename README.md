@@ -1,3 +1,3 @@
 # Stat420Project
 
-Linear Regression Modelling Project to do predictions
+Visibility Forecasting Model.
